@@ -58,6 +58,7 @@ const initEntities = (grid, width, height, numBoulders) => {
       width: boulderWidth,
       height: boulderHeight,
       popularity: randomIn(0, 100),
+      paths: initGrid(width, height, 0),
     };
     grid.insertShape(grid, boulder);
     entities[boulder.id] = boulder;

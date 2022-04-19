@@ -23,6 +23,7 @@ export type Grid = {
 export type Boulder = Shape & {
   type: 'BOULDER',
   popularity: number,
+  paths: Grid, // A* grid of shortest paths from every cell to the boulder
 };
 
 export type Person = Shape & {

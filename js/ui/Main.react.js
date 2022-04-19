@@ -5,6 +5,7 @@ const {Button, Canvas, Plot, plotReducer} = require('bens_ui_components');
 const {useState, useMemo, useEffect, useReducer} = React;
 const {initGrid, initEntities} = require('../state');
 const {deepCopy} = require('bens_utils').helpers;
+const {dist} = require('bens_utils').vectors;
 // const {mouseControlsSystem, mouseReducer} = require('bens_reducers');
 
 import type {GameState} from '../types';
@@ -111,7 +112,17 @@ const gameReducer = (game, action) => {
   switch (action.type) {
     case 'STEP_SIMULATION':
       game.time += 1;
+      // grow crypto
       game = stepCrypto(game);
+
+      // re-compute shortest paths to boulders
+      for (let entityID in entities) {
+        const entity = entities[entityID];
+        if (entity.type != 'BOULDER') continue;
+        if (game.time % entityID == 0) {
+          computeBoulderPaths(game, entity);
+        }
+      }
 
       return game;
     case 'PAUSE':
@@ -155,6 +166,60 @@ const stepCrypto = (game) => {
 
   // grid.cells = nextCells;
   return nextGame;
+};
+
+const computeBoulderPaths = (game, boulder) => {
+  const {grid} = game;
+  const cellQueue = [boulder.position];
+  boulder.paths = initGrid(grid.width, grid.height, 0);
+  while (cellQueue.length > 0) {
+    let scoreChanged = false;
+    const cell = cellQueue.pop();
+    let score = boulder.paths.getCell(boulder.paths, cell.x, cell.y);
+
+    // TODO: need to handle if your position is -1, ie you're a boulder
+    // BUT there's a difference between being this boulder and being some
+    // other boulder
+
+    // your score is the smallest of your neighbors + your crypto value + distToBoulder
+    let minScore = Infinity;
+    for (const neighbor of getNeighborPositions(grid, pos)) {
+      const val = boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y);
+      if (val < minScore) {
+        minScore = val;
+      }
+    }
+    const cryptoVal = Math.max(0, grid.getCell(grid, cell.x, cell.y));
+    minScore += cryptoVal + dist(cell, boulder.position);
+    if ((score == 0 && minScore != score) || minScore < score) {
+      score = minScore;
+      boulder.paths.setCell(boulder.paths, cell.x, cell.y, score);
+      scoreChanged = true;
+    }
+
+    // if your score changed, then add your neighbors to the queue if their
+    // score could improve
+    if (scoreChanged) {
+      for (const neighbor of getNeighborPositions(grid, pos)) {
+        if (boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y) >= score) {
+          cellQueue.push(neighbor);
+        }
+      }
+    }
+
+  }
+}
+
+const getNeighborPositions = (grid, pos) => {
+  const neighbors = [];
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      if (i == 0 && j == 0) continue;
+      if (grid.getCell(grid, pos.x + i, pos.y + j) == null) continue;
+      neighbors.push({x: pos.x + i, y: pos.y + j});
+    }
+  }
+  return neighbors;
 };
 
 module.exports = Main;

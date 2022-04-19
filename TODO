@@ -1,11 +1,12 @@
+  - Shapes:
+    - switch shapes to circles with a radius
   - People:
-    - spawn them
+    - spawn them (along edges?)
     - destination towards a boulder
     - step them
       - destroy crypto under foot -- can it look like foot prints?
       - how to decide where to step next?
         - a* where a path is considered longer if it passes on top of crypto?
-      - how to get them to prefer to follow crypto-less paths?
 
   - Crypto:
     - tune growth rate
