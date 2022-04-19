@@ -1,0 +1,18 @@
+  - People:
+    - spawn them
+    - destination towards a boulder
+    - step them
+      - destroy crypto under foot -- can it look like foot prints?
+      - how to decide where to step next?
+        - a* where a path is considered longer if it passes on top of crypto?
+      - how to get them to prefer to follow crypto-less paths?
+
+  - Crypto:
+    - tune growth rate
+    - calculate over all "health"
+
+  - Game:
+    - mouse to erase crypto
+    - spend money on mouse use
+    - lose game at certain level of health
+    - add plot of crypto health over time?
