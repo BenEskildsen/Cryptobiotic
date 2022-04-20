@@ -7,8 +7,7 @@ export type Crypto = number;
 export type Shape = {
   id: EntityID,
   position: Vector,
-  width: number,
-  height: number,
+  radius: number,
 };
 
 export type Grid = {

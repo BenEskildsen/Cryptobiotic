@@ -77,7 +77,10 @@ function Main(props: Props): React.Node {
       const entity = entities[entityID];
       if (entity.type == 'BOULDER') {
         ctx.fillStyle = 'gray';
-        ctx.fillRect(entity.position.x, entity.position.y, entity.width, entity.height);
+        ctx.beginPath();
+        ctx.arc(entity.position.x, entity.position.y, entity.radius, 0, 2 * Math.PI);
+        ctx.closePath();
+        ctx.fill();
       }
     }
   }, [game, game.time]);
@@ -103,6 +106,10 @@ function Main(props: Props): React.Node {
         label={game.paused ? 'Play' : 'Pause'}
         onClick={() => dispatch({type: 'PAUSE'})}
       />
+      <Button
+        label={"Debug"}
+        onClick={() => console.log(game)}
+      />
     </div>
   );
 }
@@ -110,7 +117,8 @@ function Main(props: Props): React.Node {
 
 const gameReducer = (game, action) => {
   switch (action.type) {
-    case 'STEP_SIMULATION':
+    case 'STEP_SIMULATION': {
+      const {entities} = game;
       game.time += 1;
       // grow crypto
       game = stepCrypto(game);
@@ -125,6 +133,7 @@ const gameReducer = (game, action) => {
       }
 
       return game;
+    }
     case 'PAUSE':
       return {
         ...game,
@@ -149,14 +158,14 @@ const stepCrypto = (game) => {
         grid.setCell(grid, x, y, Math.min(MAX_CRYPTO, val + 1));
       } else if (val == 0) {
         let set = false;
-        for (let xi = -1; xi <= 1; xi++) {
+        for (let i = -1; i <= 1; i++) {
           if (set) break;
-          for (let yi = -1; yi <= 1; yi++) {
-            const neighborVal = grid.getCell(grid, x + xi, y + yi);
+          for (let j = -1; j <= 1; j++) {
+            const neighborVal = grid.getCell(grid, x + i, y + j);
             if (neighborVal > 0 && Math.random() < neighborVal / MAX_CRYPTO) {
               grid.setCell(grid, x, y, 1);
               set = true;
-               break;
+              break;
             }
           }
         }
@@ -177,20 +186,27 @@ const computeBoulderPaths = (game, boulder) => {
     const cell = cellQueue.pop();
     let score = boulder.paths.getCell(boulder.paths, cell.x, cell.y);
 
-    // TODO: need to handle if your position is -1, ie you're a boulder
+    // Need to handle if your position is -1, ie you're a boulder
     // BUT there's a difference between being this boulder and being some
     // other boulder
+    if (
+      grid.getCell(grid, cell.x, cell.y) == -1 &&
+      dist(boulder.position, cell) > boulder.radius
+    ) {
+      score = Infinity;
+      continue;
+    }
 
-    // your score is the smallest of your neighbors + your crypto value + distToBoulder
+    // your score is the smallest of your neighbors + your crypto value + 1
     let minScore = Infinity;
-    for (const neighbor of getNeighborPositions(grid, pos)) {
+    for (const neighbor of getNeighborPositions(grid, cell)) {
       const val = boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y);
       if (val < minScore) {
         minScore = val;
       }
     }
     const cryptoVal = Math.max(0, grid.getCell(grid, cell.x, cell.y));
-    minScore += cryptoVal + dist(cell, boulder.position);
+    minScore += cryptoVal + 1;
     if ((score == 0 && minScore != score) || minScore < score) {
       score = minScore;
       boulder.paths.setCell(boulder.paths, cell.x, cell.y, score);
@@ -200,8 +216,9 @@ const computeBoulderPaths = (game, boulder) => {
     // if your score changed, then add your neighbors to the queue if their
     // score could improve
     if (scoreChanged) {
-      for (const neighbor of getNeighborPositions(grid, pos)) {
-        if (boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y) >= score) {
+      for (const neighbor of getNeighborPositions(grid, cell)) {
+        const neighborVal = boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y);
+        if (neighborVal >= score && neighborVal != Infinity) {
           cellQueue.push(neighbor);
         }
       }

@@ -35,7 +35,9 @@ const initGrid = (width, height, seed) => {
       const {x, y} = shape.position;
       for (let i = x; i < x + shape.width; i++) {
         for (let j = y; j < y + shape.height; j++) {
-          grid.setCell(grid, i, j, -1);
+          if (dist({x: i, y: j}, shape.position) <= radius) {
+            grid.setCell(grid, i, j, -1);
+          }
         }
       }
     },
@@ -46,17 +48,15 @@ const initEntities = (grid, width, height, numBoulders) => {
   let entityID = 0;
   const entities = {};
   for (let i = 0; i < numBoulders; i++) {
-    const boulderWidth = randomIn(10, 80);
-    const boulderHeight = randomIn(10, 80);
+    const radius = randomIn(10, 80);
     const boulder = {
       id: entityID++,
       type: 'BOULDER',
       position: {
-        x: randomIn(0, width - boulderWidth),
-        y: randomIn(0, height- boulderHeight),
+        x: randomIn(0, width - radius),
+        y: randomIn(0, height - radius),
       },
-      width: boulderWidth,
-      height: boulderHeight,
+      radius,
       popularity: randomIn(0, 100),
       paths: initGrid(width, height, 0),
     };
