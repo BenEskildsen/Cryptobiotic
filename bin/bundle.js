@@ -31,14 +31,16 @@ renderUI();
 
 var randomIn = require('bens_utils').stochastic.randomIn;
 
-var initGrid = function initGrid(width, height, seed) {
+var initGrid = function initGrid(width, height, seed, isRandom) {
   var cells = [];
   for (var x = 0; x < width; x++) {
     var row = [];
     for (var y = 0; y < height; y++) {
       var val = 0;
-      if (Math.random() < seed) {
+      if (isRandom && Math.random() < seed) {
         val = randomIn(0, 5);
+      } else if (!isRandom) {
+        val = seed;
       }
       row.push(val);
     }
@@ -78,10 +80,10 @@ var initGrid = function initGrid(width, height, seed) {
 };
 
 var initEntities = function initEntities(grid, width, height, numBoulders) {
-  var entityID = 0;
+  var entityID = 1;
   var entities = {};
   for (var i = 0; i < numBoulders; i++) {
-    var _radius = randomIn(10, 80);
+    var _radius = randomIn(10, 50);
     var boulder = {
       id: entityID++,
       type: 'BOULDER',
@@ -110,6 +112,8 @@ var _extends = Object.assign || function (target) { for (var i = 1; i < argument
 
 var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
+
 var React = require('react');
 
 var _require = require('bens_ui_components'),
@@ -132,11 +136,11 @@ var deepCopy = require('bens_utils').helpers.deepCopy;
 var dist = require('bens_utils').vectors.dist;
 // const {mouseControlsSystem, mouseReducer} = require('bens_reducers');
 
-var WIDTH = 800;
-var HEIGHT = 600;
+var WIDTH = 200;
+var HEIGHT = 160;
 var MONEY = 100;
 var SEED = 0.01;
-var NUM_BOULDERS = 8;
+var NUM_BOULDERS = 1;
 var TICK_MS = 500;
 var MAX_CRYPTO = 100;
 
@@ -144,7 +148,7 @@ function Main(props) {
 
   // game game
   var _useReducer = useReducer(gameReducer, {}, function () {
-    var grid = initGrid(WIDTH, HEIGHT, SEED);
+    var grid = initGrid(WIDTH, HEIGHT, SEED, true /* is random */);
     return {
       time: 0,
       paused: false,
@@ -262,8 +266,11 @@ var gameReducer = function gameReducer(game, action) {
         for (var entityID in entities) {
           var entity = entities[entityID];
           if (entity.type != 'BOULDER') continue;
-          if (game.time % entityID == 0) {
+          if (game.time % NUM_BOULDERS + 1 == entityID) {
+            console.log("recompute", game.time, entityID, entity);
+            var start = Date.now();
             computeBoulderPaths(game, entity);
+            console.log('dur', Date.now() - start);
           }
         }
 
@@ -293,10 +300,10 @@ var stepCrypto = function stepCrypto(game) {
         grid.setCell(grid, x, y, Math.min(MAX_CRYPTO, val + 1));
       } else if (val == 0) {
         var set = false;
-        for (var xi = -1; xi <= 1; xi++) {
+        for (var i = -1; i <= 1; i++) {
           if (set) break;
-          for (var yi = -1; yi <= 1; yi++) {
-            var neighborVal = grid.getCell(grid, x + xi, y + yi);
+          for (var j = -1; j <= 1; j++) {
+            var neighborVal = grid.getCell(grid, x + i, y + j);
             if (neighborVal > 0 && Math.random() < neighborVal / MAX_CRYPTO) {
               grid.setCell(grid, x, y, 1);
               set = true;
@@ -315,8 +322,9 @@ var stepCrypto = function stepCrypto(game) {
 var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
   var grid = game.grid;
 
-  var cellQueue = [boulder.position];
-  boulder.paths = initGrid(grid.width, grid.height, 0);
+  boulder.paths = initGrid(grid.width, grid.height, 100000000);
+  boulder.paths.setCell(boulder.paths, boulder.position.x, boulder.position.y, 0);
+  var cellQueue = [].concat(_toConsumableArray(getNeighborPositions(boulder.paths, boulder.position)));
   while (cellQueue.length > 0) {
     var scoreChanged = false;
     var cell = cellQueue.pop();
@@ -368,6 +376,8 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
       scoreChanged = true;
     }
 
+    // console.log(cell, score, scoreChanged);
+
     // if your score changed, then add your neighbors to the queue if their
     // score could improve
     if (scoreChanged) {
@@ -381,7 +391,7 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
 
           var neighborVal = boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y);
           if (neighborVal >= score && neighborVal != Infinity) {
-            cellQueue.push(neighbor);
+            cellQueue.unshift(neighbor);
           }
         }
       } catch (err) {

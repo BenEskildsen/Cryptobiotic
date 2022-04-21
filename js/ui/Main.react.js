@@ -10,11 +10,11 @@ const {dist} = require('bens_utils').vectors;
 
 import type {GameState} from '../types';
 
-const WIDTH = 800;
-const HEIGHT = 600;
+const WIDTH = 200;
+const HEIGHT = 160;
 const MONEY = 100;
 const SEED = 0.01;
-const NUM_BOULDERS = 8;
+const NUM_BOULDERS = 1;
 const TICK_MS = 500;
 const MAX_CRYPTO = 100;
 
@@ -25,7 +25,7 @@ function Main(props: Props): React.Node {
     gameReducer,
     {},
     () => {
-      const grid = initGrid(WIDTH, HEIGHT, SEED);
+      const grid = initGrid(WIDTH, HEIGHT, SEED, true /* is random */);
       return {
         time: 0,
         paused: false,
@@ -127,8 +127,11 @@ const gameReducer = (game, action) => {
       for (let entityID in entities) {
         const entity = entities[entityID];
         if (entity.type != 'BOULDER') continue;
-        if (game.time % entityID == 0) {
+        if (game.time % NUM_BOULDERS + 1== entityID) {
+          console.log("recompute", game.time, entityID, entity);
+          let start = Date.now();
           computeBoulderPaths(game, entity);
+          console.log('dur', Date.now() - start);
         }
       }
 
@@ -179,8 +182,9 @@ const stepCrypto = (game) => {
 
 const computeBoulderPaths = (game, boulder) => {
   const {grid} = game;
-  const cellQueue = [boulder.position];
-  boulder.paths = initGrid(grid.width, grid.height, 0);
+  boulder.paths = initGrid(grid.width, grid.height, 100000000);
+  boulder.paths.setCell(boulder.paths, boulder.position.x, boulder.position.y, 0);
+  const cellQueue = [...getNeighborPositions(boulder.paths, boulder.position)];
   while (cellQueue.length > 0) {
     let scoreChanged = false;
     const cell = cellQueue.pop();
@@ -213,13 +217,15 @@ const computeBoulderPaths = (game, boulder) => {
       scoreChanged = true;
     }
 
+    // console.log(cell, score, scoreChanged);
+
     // if your score changed, then add your neighbors to the queue if their
     // score could improve
     if (scoreChanged) {
       for (const neighbor of getNeighborPositions(grid, cell)) {
         const neighborVal = boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y);
         if (neighborVal >= score && neighborVal != Infinity) {
-          cellQueue.push(neighbor);
+          cellQueue.unshift(neighbor);
         }
       }
     }

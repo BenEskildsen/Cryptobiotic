@@ -1,14 +1,16 @@
 
 const {randomIn} = require('bens_utils').stochastic;
 
-const initGrid = (width, height, seed) => {
+const initGrid = (width, height, seed, isRandom) => {
   const cells = [];
   for (let x = 0; x < width; x++) {
     const row = [];
     for (let y = 0; y < height; y++) {
       let val = 0;
-      if (Math.random() < seed) {
+      if (isRandom && Math.random() < seed) {
         val = randomIn(0, 5);
+      } else if (!isRandom) {
+        val = seed;
       }
       row.push(val);
     }
@@ -45,10 +47,10 @@ const initGrid = (width, height, seed) => {
 };
 
 const initEntities = (grid, width, height, numBoulders) => {
-  let entityID = 0;
+  let entityID = 1;
   const entities = {};
   for (let i = 0; i < numBoulders; i++) {
-    const radius = randomIn(10, 80);
+    const radius = randomIn(10, 50);
     const boulder = {
       id: entityID++,
       type: 'BOULDER',

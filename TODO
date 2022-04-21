@@ -1,12 +1,16 @@
-  - Shapes:
-    - switch shapes to circles with a radius
+
+  - A*
+    - needs to run in a worker
+      - move everything into their own modules
+      - get worker up and running
+      - should crypto be simulated in the worker too?
+    - alternatively, A* across a smaller grid that averages/sums each quadrant
+
   - People:
     - spawn them (along edges?)
     - destination towards a boulder
-    - step them
-      - destroy crypto under foot -- can it look like foot prints?
-      - how to decide where to step next?
-        - a* where a path is considered longer if it passes on top of crypto?
+    - destroy crypto under foot -- can it look like foot prints?
+
 
   - Crypto:
     - tune growth rate
