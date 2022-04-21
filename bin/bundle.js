@@ -31,6 +31,8 @@ renderUI();
 
 var randomIn = require('bens_utils').stochastic.randomIn;
 
+var dist = require('bens_utils').vectors.dist;
+
 var initGrid = function initGrid(width, height, seed, isRandom) {
   var cells = [];
   for (var x = 0; x < width; x++) {
@@ -68,9 +70,9 @@ var initGrid = function initGrid(width, height, seed, isRandom) {
           x = _shape$position.x,
           y = _shape$position.y;
 
-      for (var i = x; i < x + shape.width; i++) {
-        for (var j = y; j < y + shape.height; j++) {
-          if (dist({ x: i, y: j }, shape.position) <= radius) {
+      for (var i = x - shape.radius; i < x + shape.radius; i++) {
+        for (var j = y - shape.radius; j < y + shape.radius; j++) {
+          if (dist({ x: i, y: j }, shape.position) <= shape.radius) {
             grid.setCell(grid, i, j, -1);
           }
         }
@@ -83,16 +85,16 @@ var initEntities = function initEntities(grid, width, height, numBoulders) {
   var entityID = 1;
   var entities = {};
   for (var i = 0; i < numBoulders; i++) {
-    var _radius = randomIn(10, 50);
+    var radius = randomIn(10, 50);
     var boulder = {
       id: entityID++,
       type: 'BOULDER',
       position: {
-        x: randomIn(0, width - _radius),
-        y: randomIn(0, height - _radius)
+        x: randomIn(0, width - radius),
+        y: randomIn(0, height - radius)
       },
-      radius: _radius,
-      popularity: randomIn(0, 100),
+      radius: radius,
+      popularity: randomIn(0, 10),
       paths: initGrid(width, height, 0)
     };
     grid.insertShape(grid, boulder);
@@ -133,16 +135,26 @@ var _require2 = require('../state'),
 
 var deepCopy = require('bens_utils').helpers.deepCopy;
 
-var dist = require('bens_utils').vectors.dist;
+var _require$vectors = require('bens_utils').vectors,
+    dist = _require$vectors.dist,
+    add = _require$vectors.add,
+    subtract = _require$vectors.subtract;
+
+var _require$stochastic = require('bens_utils').stochastic,
+    randomIn = _require$stochastic.randomIn,
+    weightedOneOf = _require$stochastic.weightedOneOf;
 // const {mouseControlsSystem, mouseReducer} = require('bens_reducers');
 
-var WIDTH = 200;
-var HEIGHT = 160;
+var WIDTH = 500;
+var HEIGHT = 600;
 var MONEY = 100;
 var SEED = 0.01;
-var NUM_BOULDERS = 1;
-var TICK_MS = 500;
+var NUM_BOULDERS = 4;
+var TICK_MS = 16;
 var MAX_CRYPTO = 100;
+var AGG_CELL_SIZE = 10;
+var AGG_WIDTH = WIDTH / AGG_CELL_SIZE;
+var AGG_HEIGHT = HEIGHT / AGG_CELL_SIZE;
 
 function Main(props) {
 
@@ -195,26 +207,28 @@ function Main(props) {
     ctx.fillRect(0, 0, grid.width, grid.height);
 
     // draw crypto:
-    for (var x = 0; x < grid.width; x++) {
-      for (var y = 0; y < grid.height; y++) {
-        var val = grid.getCell(grid, x, y);
-        if (val > 0) {
-          ctx.fillStyle = 'rgba(0, 50, 0, ' + val / MAX_CRYPTO + 20 + ')';
-          ctx.fillRect(x, y, 1, 1);
-        }
-      }
-    }
+    // for (let x = 0; x < grid.width; x++) {
+    //   for (let y = 0; y < grid.height; y++) {
+    //     const val = grid.getCell(grid, x, y);
+    //     if (val > 0) {
+    //       ctx.fillStyle = 'rgba(0, 50, 0, ' + val/MAX_CRYPTO + 20 + ')';
+    //       ctx.fillRect(x, y, 1, 1);
+    //     }
+    //   }
+    // }
 
     // draw entities:
     for (var entityID in entities) {
       var entity = entities[entityID];
       if (entity.type == 'BOULDER') {
         ctx.fillStyle = 'gray';
-        ctx.beginPath();
-        ctx.arc(entity.position.x, entity.position.y, entity.radius, 0, 2 * Math.PI);
-        ctx.closePath();
-        ctx.fill();
+      } else if (entity.type == 'PERSON') {
+        ctx.fillStyle = 'steelblue';
       }
+      ctx.beginPath();
+      ctx.arc(entity.position.x, entity.position.y, entity.radius, 0, 2 * Math.PI);
+      ctx.closePath();
+      ctx.fill();
     }
   }, [game, game.time]);
 
@@ -243,6 +257,12 @@ function Main(props) {
       }
     }),
     React.createElement(Button, {
+      label: "Spawn Person",
+      onClick: function onClick() {
+        return dispatch({ type: 'SPAWN_PERSON' });
+      }
+    }),
+    React.createElement(Button, {
       label: "Debug",
       onClick: function onClick() {
         return console.log(game);
@@ -256,21 +276,81 @@ var gameReducer = function gameReducer(game, action) {
     case 'STEP_SIMULATION':
       {
         var _game = game,
-            entities = _game.entities;
+            entities = _game.entities,
+            grid = _game.grid;
 
         game.time += 1;
         // grow crypto
-        game = stepCrypto(game);
+        if (game.time % 10 == 0) {
+          game = stepCrypto(game);
+        }
 
         // re-compute shortest paths to boulders
         for (var entityID in entities) {
           var entity = entities[entityID];
           if (entity.type != 'BOULDER') continue;
           if (game.time % NUM_BOULDERS + 1 == entityID) {
-            console.log("recompute", game.time, entityID, entity);
+            // console.log("recompute", game.time, entityID, entity);
             var start = Date.now();
             computeBoulderPaths(game, entity);
-            console.log('dur', Date.now() - start);
+            // console.log('recompute dur', game.time, entityID, Date.now() - start);
+          }
+        }
+
+        // step people
+        for (var _entityID in entities) {
+          var _entity = entities[_entityID];
+          if (_entity.type != 'PERSON') continue;
+          var possibleMoves = getNeighborPositions(_entity.destination.paths, getAggPos(_entity.position));
+          var bestMove = _entity.position;
+          var bestScore = Infinity;
+          var _iteratorNormalCompletion = true;
+          var _didIteratorError = false;
+          var _iteratorError = undefined;
+
+          try {
+            for (var _iterator = possibleMoves[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+              var move = _step.value;
+
+              var thisScore = _entity.destination.paths.getCell(_entity.destination.paths, move.x, move.y);
+              if (thisScore != null && thisScore < bestScore) {
+                bestMove = move;
+                bestScore = thisScore;
+              } else if (thisScore != null && thisScore == bestScore && Math.random() < 0.5) {
+                bestMove = move; // so you don't always go top left
+              }
+            }
+            // do the move, based on aggregate:
+          } catch (err) {
+            _didIteratorError = true;
+            _iteratorError = err;
+          } finally {
+            try {
+              if (!_iteratorNormalCompletion && _iterator.return) {
+                _iterator.return();
+              }
+            } finally {
+              if (_didIteratorError) {
+                throw _iteratorError;
+              }
+            }
+          }
+
+          var aggPos = getAggPos(_entity.position);
+          var delta = subtract(bestMove, aggPos);
+          // console.log(aggPos, bestMove, delta, bestScore);
+          _entity.position = add(_entity.position, delta);
+          // destroy crypto
+          var _entity$position = _entity.position,
+              x = _entity$position.x,
+              y = _entity$position.y;
+
+          for (var i = x - _entity.radius; i < x + _entity.radius; i++) {
+            for (var j = y - _entity.radius; j < y + _entity.radius; j++) {
+              if (dist({ x: i, y: j }, _entity.position) <= _entity.radius) {
+                grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) - MAX_CRYPTO / 2));
+              }
+            }
           }
         }
 
@@ -281,12 +361,37 @@ var gameReducer = function gameReducer(game, action) {
         paused: !game.paused
       });
     case 'SPAWN_PERSON':
+      {
+        var _game2 = game,
+            _entities = _game2.entities;
+
+        var maxID = 0;
+        var boulders = [];
+        var boulderPopularities = [];
+        for (var id in _entities) {
+          var _entityID2 = parseInt(id);
+          if (_entityID2 > maxID) maxID = _entityID2;
+          var _entity2 = _entities[_entityID2];
+          if (_entity2.type == 'BOULDER') {
+            boulders.push(_entity2);
+            boulderPopularities.push(_entity2.popularity);
+          }
+        }
+        var person = {
+          type: 'PERSON',
+          id: maxID + 1,
+          radius: 5,
+          position: { x: randomIn(5, WIDTH - 5), y: HEIGHT - 5 },
+          destination: weightedOneOf(boulders, boulderPopularities)
+        };
+        game.entities[maxID + 1] = person;
+        return game;
+      }
   }
   return game;
 };
 
 var stepCrypto = function stepCrypto(game) {
-  // const nextGame = deepCopy(game);
   var nextGame = _extends({}, game);
   var grid = nextGame.grid,
       entities = nextGame.entities;
@@ -322,9 +427,11 @@ var stepCrypto = function stepCrypto(game) {
 var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
   var grid = game.grid;
 
-  boulder.paths = initGrid(grid.width, grid.height, 100000000);
-  boulder.paths.setCell(boulder.paths, boulder.position.x, boulder.position.y, 0);
-  var cellQueue = [].concat(_toConsumableArray(getNeighborPositions(boulder.paths, boulder.position)));
+  var aggGrid = makeBoulderAggregate(game, boulder);
+  boulder.paths = initGrid(AGG_WIDTH, AGG_HEIGHT, 10000000);
+  var boulderAggPos = getAggPos(boulder.position);
+  boulder.paths.setCell(boulder.paths, boulderAggPos.x, boulderAggPos.y, 0);
+  var cellQueue = [].concat(_toConsumableArray(getNeighborPositions(boulder.paths, boulderAggPos)));
   while (cellQueue.length > 0) {
     var scoreChanged = false;
     var cell = cellQueue.pop();
@@ -333,20 +440,20 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
     // Need to handle if your position is -1, ie you're a boulder
     // BUT there's a difference between being this boulder and being some
     // other boulder
-    if (grid.getCell(grid, cell.x, cell.y) == -1 && dist(boulder.position, cell) > boulder.radius) {
+    if (aggGrid.getCell(aggGrid, cell.x, cell.y) < 0 && dist(boulderAggPos, cell) > boulder.radius) {
       score = Infinity;
       continue;
     }
 
     // your score is the smallest of your neighbors + your crypto value + 1
     var minScore = Infinity;
-    var _iteratorNormalCompletion = true;
-    var _didIteratorError = false;
-    var _iteratorError = undefined;
+    var _iteratorNormalCompletion2 = true;
+    var _didIteratorError2 = false;
+    var _iteratorError2 = undefined;
 
     try {
-      for (var _iterator = getNeighborPositions(grid, cell)[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
-        var _neighbor = _step.value;
+      for (var _iterator2 = getNeighborPositions(aggGrid, cell)[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+        var _neighbor = _step2.value;
 
         var val = boulder.paths.getCell(boulder.paths, _neighbor.x, _neighbor.y);
         if (val < minScore) {
@@ -354,21 +461,21 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
         }
       }
     } catch (err) {
-      _didIteratorError = true;
-      _iteratorError = err;
+      _didIteratorError2 = true;
+      _iteratorError2 = err;
     } finally {
       try {
-        if (!_iteratorNormalCompletion && _iterator.return) {
-          _iterator.return();
+        if (!_iteratorNormalCompletion2 && _iterator2.return) {
+          _iterator2.return();
         }
       } finally {
-        if (_didIteratorError) {
-          throw _iteratorError;
+        if (_didIteratorError2) {
+          throw _iteratorError2;
         }
       }
     }
 
-    var cryptoVal = Math.max(0, grid.getCell(grid, cell.x, cell.y));
+    var cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
     minScore += cryptoVal + 1;
     if (score == 0 && minScore != score || minScore < score) {
       score = minScore;
@@ -381,13 +488,13 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
     // if your score changed, then add your neighbors to the queue if their
     // score could improve
     if (scoreChanged) {
-      var _iteratorNormalCompletion2 = true;
-      var _didIteratorError2 = false;
-      var _iteratorError2 = undefined;
+      var _iteratorNormalCompletion3 = true;
+      var _didIteratorError3 = false;
+      var _iteratorError3 = undefined;
 
       try {
-        for (var _iterator2 = getNeighborPositions(grid, cell)[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
-          var neighbor = _step2.value;
+        for (var _iterator3 = getNeighborPositions(aggGrid, cell)[Symbol.iterator](), _step3; !(_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done); _iteratorNormalCompletion3 = true) {
+          var neighbor = _step3.value;
 
           var neighborVal = boulder.paths.getCell(boulder.paths, neighbor.x, neighbor.y);
           if (neighborVal >= score && neighborVal != Infinity) {
@@ -395,21 +502,43 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
           }
         }
       } catch (err) {
-        _didIteratorError2 = true;
-        _iteratorError2 = err;
+        _didIteratorError3 = true;
+        _iteratorError3 = err;
       } finally {
         try {
-          if (!_iteratorNormalCompletion2 && _iterator2.return) {
-            _iterator2.return();
+          if (!_iteratorNormalCompletion3 && _iterator3.return) {
+            _iterator3.return();
           }
         } finally {
-          if (_didIteratorError2) {
-            throw _iteratorError2;
+          if (_didIteratorError3) {
+            throw _iteratorError3;
           }
         }
       }
     }
   }
+};
+
+var makeBoulderAggregate = function makeBoulderAggregate(game, boulder) {
+  var aggregate = initGrid(AGG_WIDTH, AGG_HEIGHT, 0);
+  for (var i = 0; i < AGG_WIDTH; i++) {
+    for (var j = 0; j < AGG_HEIGHT; j++) {
+      var cellSum = 0;
+      for (var x = 0; x < AGG_CELL_SIZE; x++) {
+        for (var y = 0; y < AGG_CELL_SIZE; y++) {
+          cellSum += game.grid.getCell(game.grid, i * AGG_CELL_SIZE + x, j * AGG_CELL_SIZE + y);
+        }
+      }
+      aggregate.setCell(aggregate, i, j, cellSum);
+    }
+  }
+  return aggregate;
+};
+// convert from game grid position to aggregate grid position
+var getAggPos = function getAggPos(pos) {
+  var aggX = Math.floor(pos.x / AGG_CELL_SIZE);
+  var aggY = Math.floor(pos.y / AGG_CELL_SIZE);
+  return { x: aggX, y: aggY };
 };
 
 var getNeighborPositions = function getNeighborPositions(grid, pos) {

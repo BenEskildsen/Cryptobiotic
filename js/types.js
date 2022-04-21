@@ -27,7 +27,7 @@ export type Boulder = Shape & {
 
 export type Person = Shape & {
   type: 'PERSON',
-  destination: Vector,
+  destination: Boulder, // could be a position, but boulder knows the paths to it
 };
 
 export type Entity = Person | Boulder;

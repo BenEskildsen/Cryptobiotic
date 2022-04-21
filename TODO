@@ -1,20 +1,12 @@
 
-  - A*
-    - needs to run in a worker
-      - move everything into their own modules
-      - get worker up and running
-      - should crypto be simulated in the worker too?
-    - alternatively, A* across a smaller grid that averages/sums each quadrant
-
   - People:
-    - spawn them (along edges?)
-    - destination towards a boulder
-    - destroy crypto under foot -- can it look like foot prints?
-
+    - can it looks like footprints?
+    - crypto stepping penalty is too high
 
   - Crypto:
-    - tune growth rate
-    - calculate over all "health"
+    - tune growth rate even slower
+    - get it to render more efficiently
+    - calculate overall "health"
 
   - Game:
     - mouse to erase crypto

@@ -1,5 +1,6 @@
 
 const {randomIn} = require('bens_utils').stochastic;
+const {dist} = require('bens_utils').vectors;
 
 const initGrid = (width, height, seed, isRandom) => {
   const cells = [];
@@ -35,9 +36,9 @@ const initGrid = (width, height, seed, isRandom) => {
     // clears an area:
     insertShape: (grid, shape) => {
       const {x, y} = shape.position;
-      for (let i = x; i < x + shape.width; i++) {
-        for (let j = y; j < y + shape.height; j++) {
-          if (dist({x: i, y: j}, shape.position) <= radius) {
+      for (let i = x - shape.radius; i < x + shape.radius; i++) {
+        for (let j = y - shape.radius; j < y + shape.radius; j++) {
+          if (dist({x: i, y: j}, shape.position) <= shape.radius) {
             grid.setCell(grid, i, j, -1);
           }
         }
@@ -59,7 +60,7 @@ const initEntities = (grid, width, height, numBoulders) => {
         y: randomIn(0, height - radius),
       },
       radius,
-      popularity: randomIn(0, 100),
+      popularity: randomIn(0, 10),
       paths: initGrid(width, height, 0),
     };
     grid.insertShape(grid, boulder);
