@@ -5,7 +5,6 @@
 
   - Crypto:
     - tune growth rate even slower
-    - get it to render more efficiently
     - calculate overall "health"
 
   - Game:

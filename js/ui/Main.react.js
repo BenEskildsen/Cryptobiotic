@@ -66,15 +66,21 @@ function Main(props: Props): React.Node {
     ctx.fillRect(0, 0, grid.width, grid.height);
 
     // draw crypto:
-    // for (let x = 0; x < grid.width; x++) {
-    //   for (let y = 0; y < grid.height; y++) {
-    //     const val = grid.getCell(grid, x, y);
-    //     if (val > 0) {
-    //       ctx.fillStyle = 'rgba(0, 50, 0, ' + val/MAX_CRYPTO + 20 + ')';
-    //       ctx.fillRect(x, y, 1, 1);
-    //     }
-    //   }
-    // }
+    const imgData = ctx.getImageData(0, 0, WIDTH, HEIGHT);
+    for (let x = 0; x < grid.width; x++) {
+      for (let y = 0; y < grid.height; y++) {
+        const val = grid.getCell(grid, x, y);
+        if (val > 0) {
+          // ctx.fillStyle = 'rgba(0, 50, 0, ' + val/MAX_CRYPTO + 20 + ')';
+          // ctx.fillRect(x, y, 1, 1);
+          setRGBA(
+            imgData, x, y,
+            {r: 0, g: 50, b: 0, a: Math.round(255 * val / (MAX_CRYPTO + 20))},
+          );
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
 
     // draw entities:
     for (let entityID in entities) {
@@ -340,6 +346,26 @@ const getNeighborPositions = (grid, pos) => {
     }
   }
   return neighbors;
+};
+
+const getRGBA = (imgData, x, y) => {
+  const pixel = 4 * y * imgData.width + 4 * x;
+  return {
+    r: imgData[pixel],
+    g: imgData[pixel + 1],
+    b: imgData[pixel + 2],
+    a: imgData[pixel + 3],
+  };
+}
+
+const setRGBA = (imgData, x, y, rgba) => {
+  const pixel = 4 * y * imgData.width + 4 * x;
+  imgData.data[pixel] = rgba.r;
+  imgData.data[pixel + 1] = rgba.g;
+  imgData.data[pixel + 2] = rgba.b;
+  rgba.a !== undefined
+    ? imgData.data[pixel + 3] = rgba.a
+    : imgData.data[pixel + 3] = 255;
 };
 
 module.exports = Main;
