@@ -14,10 +14,10 @@ import type {GameState} from '../types';
 const WIDTH = 500;
 const HEIGHT = 600;
 const MONEY = 50;
-const NUM_BOULDERS = 7;
+const NUM_BOULDERS = 20;
 const PERSON_RADIUS = 5;
 const PERSON_SPAWN_RATE = 25;
-const STEP_KILL_RATE = 0.5; // more like 1 - kill rate as the formula is next = val * kill
+const STEP_KILL_RATE = 0.5; // more like 1 - kill: formula is next = val * kill
 
 const SEED = 0.05;
 const TICK_MS = 16;
@@ -212,7 +212,7 @@ const gameReducer = (game, action) => {
         const {x, y} = entity.position;
         for (let i = x - entity.radius; i < x + entity.radius; i++) {
           for (let j = y - entity.radius; j < y + entity.radius; j++) {
-            if (dist({x: i, y: j}, entity.position) <= entity.radius) {
+            if (dist({x: i, y: j}, entity.position) <= entity.radius && Math.random() < 0.1) {
               grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) * STEP_KILL_RATE));
             }
           }

@@ -150,10 +150,10 @@ var _require$stochastic = require('bens_utils').stochastic,
 var WIDTH = 500;
 var HEIGHT = 600;
 var MONEY = 50;
-var NUM_BOULDERS = 7;
+var NUM_BOULDERS = 20;
 var PERSON_RADIUS = 5;
 var PERSON_SPAWN_RATE = 25;
-var STEP_KILL_RATE = 0.5; // more like 1 - kill rate as the formula is next = val * kill
+var STEP_KILL_RATE = 0.5; // more like 1 - kill: formula is next = val * kill
 
 var SEED = 0.05;
 var TICK_MS = 16;
@@ -393,7 +393,7 @@ var gameReducer = function gameReducer(game, action) {
 
           for (var i = x - _entity.radius; i < x + _entity.radius; i++) {
             for (var j = y - _entity.radius; j < y + _entity.radius; j++) {
-              if (dist({ x: i, y: j }, _entity.position) <= _entity.radius) {
+              if (dist({ x: i, y: j }, _entity.position) <= _entity.radius && Math.random() < 0.1) {
                 grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) * STEP_KILL_RATE));
               }
             }
