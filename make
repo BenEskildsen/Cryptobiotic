@@ -5,13 +5,13 @@
 mkdir bin
 
 # scrape for todos
-touch TEMP_TODO
-grep -v "TODO" TODO >> TEMP_TODO
-rm TODO
-mv TEMP_TODO TODO
-cd js
-grep -r "TODO" . >> ../TODO
-cd ../
+# touch TEMP_TODO
+# grep -v "TODO" TODO >> TEMP_TODO
+# rm TODO
+# mv TEMP_TODO TODO
+# cd js
+# grep -r "TODO" . >> ../TODO
+# cd ../
 
 # flow transform
 # npm run babel -- --presets flow index.js

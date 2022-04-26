@@ -1,14 +1,39 @@
 
   - People:
+    - have people create desire paths
+      - initial branching is good, but people settle on the most efficient path
+        too quickly
+      - crypto stepping penalty is too high
+      - when penalty is low, they create the most direct path, when it is
+        high, they always follow existing paths no matter the inconvenience
+      - need randomness?
+    - could have different personalities by pre-computing per boulder for each profile
+      - always takes shortest distance <-- will just create the correct paths
+      - always takes existing path  <-- will just never destroy anything
+      - creates shortcuts at some sort of threshold <-- THIS is the one I need to make first
+    - clean up people who have reached destination
+      - or have them return?
+      - or have them pick a different boulder
     - can it looks like footprints?
-    - crypto stepping penalty is too high
 
   - Crypto:
-    - tune growth rate even slower
+    - early growth looks white
+      - need to blend with the tan (255, 235, 205)
+    - tune growth rate
+      - start with a greater concentration
+      - even slower growth
+      - never fully fill up the screen
+        - growth asymptotic with health?
+      - some sort of runaway failure?
+      - paths fill in too quickly
     - calculate overall "health"
 
   - Game:
-    - mouse to erase crypto
-    - spend money on mouse use
+    - differentiate desire paths from paths you've created?
     - lose game at certain level of health
+    - track total people spawned
     - add plot of crypto health over time?
+    - trail creation:
+      - indicate that lack of money is preventing trail creation
+      - end click state when money is out to prevent spotting
+    - better UI placement for money, etc.

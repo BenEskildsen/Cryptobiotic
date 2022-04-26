@@ -133,7 +133,9 @@ var _require2 = require('../state'),
     initGrid = _require2.initGrid,
     initEntities = _require2.initEntities;
 
-var deepCopy = require('bens_utils').helpers.deepCopy;
+var _require$helpers = require('bens_utils').helpers,
+    deepCopy = _require$helpers.deepCopy,
+    throttle = _require$helpers.throttle;
 
 var _require$vectors = require('bens_utils').vectors,
     dist = _require$vectors.dist,
@@ -147,18 +149,23 @@ var _require$stochastic = require('bens_utils').stochastic,
 
 var WIDTH = 500;
 var HEIGHT = 600;
-var MONEY = 100;
-var SEED = 0.01;
-var NUM_BOULDERS = 4;
+var MONEY = 50;
+var NUM_BOULDERS = 7;
+var PERSON_RADIUS = 5;
+var PERSON_SPAWN_RATE = 25;
+var STEP_KILL_RATE = 0.5; // more like 1 - kill rate as the formula is next = val * kill
+
+var SEED = 0.05;
 var TICK_MS = 16;
-var MAX_CRYPTO = 100;
+var MAX_CRYPTO = 1000;
+
 var AGG_CELL_SIZE = 10;
 var AGG_WIDTH = WIDTH / AGG_CELL_SIZE;
 var AGG_HEIGHT = HEIGHT / AGG_CELL_SIZE;
 
 function Main(props) {
 
-  // game game
+  // game state
   var _useReducer = useReducer(gameReducer, {}, function () {
     var grid = initGrid(WIDTH, HEIGHT, SEED, true /* is random */);
     return {
@@ -184,27 +191,17 @@ function Main(props) {
     }
     var interval = setInterval(function () {
       dispatch({ type: 'STEP_SIMULATION' });
+      if (game.time % PERSON_SPAWN_RATE == 0) {
+        dispatch({ type: 'SPAWN_PERSON' });
+      }
     }, TICK_MS);
 
     return function () {
       return clearInterval(interval);
     };
-  }, [game, game.paused, dispatch, TICK_MS]);
+  }, [game, game.time, game.paused, dispatch, TICK_MS]);
 
   // rendering
-  useEffect(function () {
-    console.log("drawn background");
-    var canvas = document.getElementById('canvas');
-    if (!canvas) return;
-    var ctx = canvas.getContext('2d');
-
-    // const {grid, entities} = game;
-    // if (!grid) return;
-
-    // draw ground:
-    ctx.fillStyle = '#FFEBCD';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  }, []);
   useEffect(function () {
     var canvas = document.getElementById('canvas');
     if (!canvas) return;
@@ -225,8 +222,6 @@ function Main(props) {
       for (var y = 0; y < grid.height; y++) {
         var val = grid.getCell(grid, x, y);
         if (val > 0) {
-          // ctx.fillStyle = 'rgba(0, 50, 0, ' + val/MAX_CRYPTO + 20 + ')';
-          // ctx.fillRect(x, y, 1, 1);
           setRGBA(imgData, x, y, { r: 0, g: 50, b: 0, a: Math.round(255 * val / (MAX_CRYPTO + 20)) });
         }
       }
@@ -248,8 +243,37 @@ function Main(props) {
     }
   }, [game, game.time]);
 
-  // mouse game
-  useEffect(function () {}, []);
+  // mouse effect
+
+  var _useState = useState(false),
+      _useState2 = _slicedToArray(_useState, 2),
+      mouseDown = _useState2[0],
+      setMouseDown = _useState2[1];
+
+  useEffect(function () {
+    var click = function click(ev) {
+      if (!mouseDown) return;
+      var pixel = getMousePixel(ev, 'canvas');
+      if (pixel == null) return;
+      dispatch({ type: 'CLEAR_PATH', position: pixel, radius: 10 });
+    };
+    document.onmousedown = function () {
+      return setMouseDown(true);
+    };
+    document.onmouseup = function () {
+      return setMouseDown(false);
+    };
+    if (mouseDown) {
+      if (game.money <= 0) {
+        setMouseDown(false);
+        document.onmousemove = undefined;
+        return;
+      }
+      document.onmousemove = click;
+    } else {
+      document.onmousemove = undefined;
+    }
+  }, [dispatch, setMouseDown, mouseDown, game.money]);
 
   return React.createElement(
     'div',
@@ -286,6 +310,10 @@ function Main(props) {
     })
   );
 }
+
+////////////////////////////////////////////////////////////////////////
+// Reducers
+////////////////////////////////////////////////////////////////////////
 
 var gameReducer = function gameReducer(game, action) {
   switch (action.type) {
@@ -334,6 +362,8 @@ var gameReducer = function gameReducer(game, action) {
                 bestScore = thisScore;
               } else if (thisScore != null && thisScore == bestScore && Math.random() < 0.5) {
                 bestMove = move; // so you don't always go top left
+              } else if (thisScore != null && Math.random() < 1 / (10 * (thisScore - bestScore))) {
+                bestMove = move; // so you don't always go top left
               }
             }
             // do the move, based on aggregate:
@@ -364,7 +394,7 @@ var gameReducer = function gameReducer(game, action) {
           for (var i = x - _entity.radius; i < x + _entity.radius; i++) {
             for (var j = y - _entity.radius; j < y + _entity.radius; j++) {
               if (dist({ x: i, y: j }, _entity.position) <= _entity.radius) {
-                grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) - MAX_CRYPTO / 2));
+                grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) * STEP_KILL_RATE));
               }
             }
           }
@@ -396,16 +426,42 @@ var gameReducer = function gameReducer(game, action) {
         var person = {
           type: 'PERSON',
           id: maxID + 1,
-          radius: 5,
+          radius: PERSON_RADIUS,
           position: { x: randomIn(5, WIDTH - 5), y: HEIGHT - 5 },
           destination: weightedOneOf(boulders, boulderPopularities)
         };
         game.entities[maxID + 1] = person;
+        game.money += 1;
+        return game;
+      }
+    case 'CLEAR_PATH':
+      {
+        var position = action.position,
+            radius = action.radius;
+        var _game3 = game,
+            _grid = _game3.grid;
+        var x = position.x,
+            y = position.y;
+
+        if (game.money <= 0) return game; // prevent use if you can't afford it
+
+        for (var _i = x - radius; _i < x + radius; _i++) {
+          for (var _j = y - radius; _j < y + radius; _j++) {
+            if (dist({ x: _i, y: _j }, position) <= radius) {
+              _grid.setCell(_grid, _i, _j, 0);
+            }
+          }
+        }
+        game.money -= 1;
         return game;
       }
   }
   return game;
 };
+
+////////////////////////////////////////////////////////////////////////
+// Simulation
+////////////////////////////////////////////////////////////////////////
 
 var stepCrypto = function stepCrypto(game) {
   var nextGame = _extends({}, game);
@@ -440,6 +496,10 @@ var stepCrypto = function stepCrypto(game) {
   return nextGame;
 };
 
+////////////////////////////////////////////////////////////////////////
+// A*
+////////////////////////////////////////////////////////////////////////
+
 var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
   var grid = game.grid;
 
@@ -456,7 +516,7 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
     // Need to handle if your position is -1, ie you're a boulder
     // BUT there's a difference between being this boulder and being some
     // other boulder
-    if (aggGrid.getCell(aggGrid, cell.x, cell.y) < 0 && dist(boulderAggPos, cell) > boulder.radius) {
+    if (aggGrid.getCell(aggGrid, cell.x, cell.y) < 0 && dist(boulderAggPos, cell) > boulder.radius / AGG_CELL_SIZE) {
       score = Infinity;
       continue;
     }
@@ -492,7 +552,7 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
     }
 
     var cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
-    minScore += cryptoVal + 1;
+    minScore += cryptoVal / MAX_CRYPTO + 1;
     if (score == 0 && minScore != score || minScore < score) {
       score = minScore;
       boulder.paths.setCell(boulder.paths, cell.x, cell.y, score);
@@ -557,6 +617,10 @@ var getAggPos = function getAggPos(pos) {
   return { x: aggX, y: aggY };
 };
 
+////////////////////////////////////////////////////////////////////////
+// Grid helpers
+////////////////////////////////////////////////////////////////////////
+
 var getNeighborPositions = function getNeighborPositions(grid, pos) {
   var neighbors = [];
   for (var i = -1; i <= 1; i++) {
@@ -568,6 +632,38 @@ var getNeighborPositions = function getNeighborPositions(grid, pos) {
   }
   return neighbors;
 };
+
+////////////////////////////////////////////////////////////////////////
+// Mouse
+////////////////////////////////////////////////////////////////////////
+var getMousePixel = function getMousePixel(ev, canvasID) {
+  var canvas = document.getElementById(canvasID);
+  if (!canvas) return null;
+  var canvasDims = canvas.getBoundingClientRect();
+  var x = ev.clientX;
+  var y = ev.clientY;
+  if (ev.type === 'touchstart' || ev.type === 'touchmove' || ev.type === 'touchend') {
+    var touch = ev.touches[0];
+    x = touch.clientX;
+    y = touch.clientY;
+  }
+  var canvasPos = {
+    x: x - canvasDims.left,
+    y: y - canvasDims.top
+  };
+  var canvasWidth = canvasDims.width,
+      canvasHeight = canvasDims.height;
+  // return null if clicked outside the canvas:
+
+  if (canvasPos.x < 0 || canvasPos.y < 0 || canvasPos.x > canvasWidth || canvasPos.y > canvasHeight) {
+    return null;
+  }
+  return canvasPos;
+};
+
+////////////////////////////////////////////////////////////////////////
+// Rendering
+////////////////////////////////////////////////////////////////////////
 
 var getRGBA = function getRGBA(imgData, x, y) {
   var pixel = 4 * y * imgData.width + 4 * x;

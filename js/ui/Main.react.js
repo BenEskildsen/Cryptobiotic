@@ -4,7 +4,7 @@ const React = require('react');
 const {Button, Canvas, Plot, plotReducer} = require('bens_ui_components');
 const {useState, useMemo, useEffect, useReducer} = React;
 const {initGrid, initEntities} = require('../state');
-const {deepCopy} = require('bens_utils').helpers;
+const {deepCopy, throttle} = require('bens_utils').helpers;
 const {dist, add, subtract} = require('bens_utils').vectors;
 const {randomIn, weightedOneOf} = require('bens_utils').stochastic;
 // const {mouseControlsSystem, mouseReducer} = require('bens_reducers');
@@ -13,18 +13,23 @@ import type {GameState} from '../types';
 
 const WIDTH = 500;
 const HEIGHT = 600;
-const MONEY = 100;
-const SEED = 0.01;
-const NUM_BOULDERS = 4;
+const MONEY = 50;
+const NUM_BOULDERS = 7;
+const PERSON_RADIUS = 5;
+const PERSON_SPAWN_RATE = 25;
+const STEP_KILL_RATE = 0.5; // more like 1 - kill rate as the formula is next = val * kill
+
+const SEED = 0.05;
 const TICK_MS = 16;
-const MAX_CRYPTO = 100;
+const MAX_CRYPTO = 1000;
+
 const AGG_CELL_SIZE = 10;
 const AGG_WIDTH = WIDTH / AGG_CELL_SIZE;
 const AGG_HEIGHT = HEIGHT / AGG_CELL_SIZE;
 
 function Main(props: Props): React.Node {
 
-  // game game
+  // game state
   const [game, dispatch] = useReducer(
     gameReducer,
     {},
@@ -47,10 +52,13 @@ function Main(props: Props): React.Node {
     }
     let interval = setInterval(() => {
       dispatch({type: 'STEP_SIMULATION'});
-    }, TICK_MS)
+      if (game.time % PERSON_SPAWN_RATE == 0) {
+        dispatch({type: 'SPAWN_PERSON'});
+      }
+    }, TICK_MS);
 
     return () => clearInterval(interval);
-  }, [game, game.paused, dispatch, TICK_MS]);
+  }, [game, game.time, game.paused, dispatch, TICK_MS]);
 
   // rendering
   useEffect(() => {
@@ -71,8 +79,6 @@ function Main(props: Props): React.Node {
       for (let y = 0; y < grid.height; y++) {
         const val = grid.getCell(grid, x, y);
         if (val > 0) {
-          // ctx.fillStyle = 'rgba(0, 50, 0, ' + val/MAX_CRYPTO + 20 + ')';
-          // ctx.fillRect(x, y, 1, 1);
           setRGBA(
             imgData, x, y,
             {r: 0, g: 50, b: 0, a: Math.round(255 * val / (MAX_CRYPTO + 20))},
@@ -97,9 +103,28 @@ function Main(props: Props): React.Node {
     }
   }, [game, game.time]);
 
-  // mouse game
+  // mouse effect
+  const [mouseDown, setMouseDown] = useState(false);
   useEffect(() => {
-  }, []);
+    const click = (ev) => {
+      if (!mouseDown) return;
+      const pixel = getMousePixel(ev, 'canvas');
+      if (pixel == null) return;
+      dispatch({type: 'CLEAR_PATH', position: pixel, radius: 10});
+    };
+    document.onmousedown = () => setMouseDown(true);
+    document.onmouseup = () => setMouseDown(false);
+    if (mouseDown) {
+      if (game.money <= 0) {
+        setMouseDown(false);
+        document.onmousemove = undefined;
+        return;
+      }
+      document.onmousemove = click;
+    } else {
+      document.onmousemove = undefined;
+    }
+  }, [dispatch, setMouseDown, mouseDown, game.money]);
 
   return (
     <div
@@ -130,6 +155,9 @@ function Main(props: Props): React.Node {
   );
 }
 
+////////////////////////////////////////////////////////////////////////
+// Reducers
+////////////////////////////////////////////////////////////////////////
 
 const gameReducer = (game, action) => {
   switch (action.type) {
@@ -171,6 +199,8 @@ const gameReducer = (game, action) => {
             bestScore = thisScore;
           } else if (thisScore != null && thisScore == bestScore && Math.random() < 0.5) {
             bestMove = move; // so you don't always go top left
+          } else if (thisScore != null && Math.random() < 1/(10 * (thisScore - bestScore))) {
+            bestMove = move; // so you don't always go top left
           }
         }
         // do the move, based on aggregate:
@@ -183,7 +213,7 @@ const gameReducer = (game, action) => {
         for (let i = x - entity.radius; i < x + entity.radius; i++) {
           for (let j = y - entity.radius; j < y + entity.radius; j++) {
             if (dist({x: i, y: j}, entity.position) <= entity.radius) {
-              grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) - MAX_CRYPTO / 2));
+              grid.setCell(grid, i, j, Math.max(0, grid.getCell(grid, i, j) * STEP_KILL_RATE));
             }
           }
         }
@@ -214,17 +244,37 @@ const gameReducer = (game, action) => {
       const person = {
         type: 'PERSON',
         id: maxID + 1,
-        radius: 5,
+        radius: PERSON_RADIUS,
         position: {x: randomIn(5, WIDTH - 5), y: HEIGHT - 5},
         destination: weightedOneOf(boulders, boulderPopularities),
       }
       game.entities[maxID + 1] = person;
+      game.money += 1;
+      return game;
+    }
+    case 'CLEAR_PATH': {
+      const {position, radius} = action;
+      const {grid} = game;
+      const {x, y} = position;
+      if (game.money <= 0) return game; // prevent use if you can't afford it
+
+      for (let i = x - radius; i < x + radius; i++) {
+        for (let j = y - radius; j < y + radius; j++) {
+          if (dist({x: i, y: j}, position) <= radius) {
+            grid.setCell(grid, i, j, 0);
+          }
+        }
+      }
+      game.money -= 1;
       return game;
     }
   }
   return game;
 };
 
+////////////////////////////////////////////////////////////////////////
+// Simulation
+////////////////////////////////////////////////////////////////////////
 
 const stepCrypto = (game) => {
   const nextGame = {...game};
@@ -257,6 +307,10 @@ const stepCrypto = (game) => {
   return nextGame;
 };
 
+////////////////////////////////////////////////////////////////////////
+// A*
+////////////////////////////////////////////////////////////////////////
+
 const computeBoulderPaths = (game, boulder) => {
   const {grid} = game;
   const aggGrid = makeBoulderAggregate(game, boulder);
@@ -274,7 +328,7 @@ const computeBoulderPaths = (game, boulder) => {
     // other boulder
     if (
       aggGrid.getCell(aggGrid, cell.x, cell.y) < 0 &&
-      dist(boulderAggPos, cell) > boulder.radius
+      dist(boulderAggPos, cell) > boulder.radius / AGG_CELL_SIZE
     ) {
       score = Infinity;
       continue;
@@ -289,7 +343,7 @@ const computeBoulderPaths = (game, boulder) => {
       }
     }
     const cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
-    minScore += cryptoVal + 1;
+    minScore += cryptoVal/MAX_CRYPTO + 1;
     if ((score == 0 && minScore != score) || minScore < score) {
       score = minScore;
       boulder.paths.setCell(boulder.paths, cell.x, cell.y, score);
@@ -336,6 +390,10 @@ const getAggPos = (pos) => {
   return {x: aggX, y: aggY};
 }
 
+////////////////////////////////////////////////////////////////////////
+// Grid helpers
+////////////////////////////////////////////////////////////////////////
+
 const getNeighborPositions = (grid, pos) => {
   const neighbors = [];
   for (let i = -1; i <= 1; i++) {
@@ -347,6 +405,41 @@ const getNeighborPositions = (grid, pos) => {
   }
   return neighbors;
 };
+
+////////////////////////////////////////////////////////////////////////
+// Mouse
+////////////////////////////////////////////////////////////////////////
+const getMousePixel = (ev, canvasID): ?Vector => {
+  const canvas = document.getElementById(canvasID);
+  if (!canvas) return null;
+  const canvasDims = canvas.getBoundingClientRect();
+  let x = ev.clientX;
+  let y = ev.clientY;
+  if (
+    ev.type === 'touchstart' || ev.type === 'touchmove' || ev.type === 'touchend'
+  ) {
+    const touch = ev.touches[0];
+    x = touch.clientX;
+    y = touch.clientY;
+  }
+  const canvasPos = {
+    x: x - canvasDims.left,
+    y: y - canvasDims.top,
+  };
+  const {width: canvasWidth, height: canvasHeight} = canvasDims;
+  // return null if clicked outside the canvas:
+  if (
+    canvasPos.x < 0 || canvasPos.y < 0 ||
+    canvasPos.x > canvasWidth || canvasPos.y > canvasHeight
+  ) {
+    return null;
+  }
+  return canvasPos;
+};
+
+////////////////////////////////////////////////////////////////////////
+// Rendering
+////////////////////////////////////////////////////////////////////////
 
 const getRGBA = (imgData, x, y) => {
   const pixel = 4 * y * imgData.width + 4 * x;
