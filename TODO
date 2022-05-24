@@ -2,6 +2,7 @@
   - People:
     - prevent moving inside boulders
     - have people create desire paths
+      - people can't know the entire best path to their destination
       - initial branching is good, but people settle on the most efficient path
         too quickly
       - when penalty is low, they create the most direct path, when it is

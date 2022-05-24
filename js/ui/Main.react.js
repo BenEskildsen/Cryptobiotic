@@ -191,9 +191,11 @@ const gameReducer = (game, action) => {
         let bestMove = entity.position;
         let bestScore = Infinity;
         for (const move of possibleMoves) {
-          const thisScore = entity.destination.paths.getCell(
+          // thisScore is A* path value + a penalty for crypto nearby
+          let thisScore = entity.destination.paths.getCell(
             entity.destination.paths, move.x, move.y,
           );
+          thisScore += grid.getCell(grid, move.x, move.y);
           if (thisScore != null && thisScore < bestScore) {
             bestMove = move;
             bestScore = thisScore;
@@ -342,8 +344,9 @@ const computeBoulderPaths = (game, boulder) => {
         minScore = val;
       }
     }
-    const cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
-    minScore += cryptoVal/MAX_CRYPTO + 1;
+    // const cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
+    // minScore += cryptoVal/MAX_CRYPTO + 1;
+    minScore += 1; // Testing pure A*
     if ((score == 0 && minScore != score) || minScore < score) {
       score = minScore;
       boulder.paths.setCell(boulder.paths, cell.x, cell.y, score);

@@ -356,7 +356,9 @@ var gameReducer = function gameReducer(game, action) {
             for (var _iterator = possibleMoves[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
               var move = _step.value;
 
+              // thisScore is A* path value + a penalty for crypto nearby
               var thisScore = _entity.destination.paths.getCell(_entity.destination.paths, move.x, move.y);
+              thisScore += grid.getCell(grid, move.x, move.y);
               if (thisScore != null && thisScore < bestScore) {
                 bestMove = move;
                 bestScore = thisScore;
@@ -536,6 +538,8 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
           minScore = val;
         }
       }
+      // const cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
+      // minScore += cryptoVal/MAX_CRYPTO + 1;
     } catch (err) {
       _didIteratorError2 = true;
       _iteratorError2 = err;
@@ -551,8 +555,7 @@ var computeBoulderPaths = function computeBoulderPaths(game, boulder) {
       }
     }
 
-    var cryptoVal = Math.max(0, aggGrid.getCell(aggGrid, cell.x, cell.y));
-    minScore += cryptoVal / MAX_CRYPTO + 1;
+    minScore += 1; // Testing pure A*
     if (score == 0 && minScore != score || minScore < score) {
       score = minScore;
       boulder.paths.setCell(boulder.paths, cell.x, cell.y, score);
